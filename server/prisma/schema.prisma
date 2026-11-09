@@ -1,0 +1,773 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ENUMS
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum Role {
+  SELLER
+  BUYER
+  ADMIN
+}
+
+enum SellerType {
+  FARMER
+  RICE_MILL
+  TEA_ESTATE
+  FOOD_PROCESSING
+  OTHER_INDUSTRY
+  MUNICIPAL_BODY
+}
+
+enum BuyerType {
+  WASTE_TO_ENERGY
+  BRICK_KILN
+  PELLET_UNIT
+  BIOGAS_PLANT
+  OTHER
+}
+
+enum OperationalStatus {
+  OPERATIONAL
+  SEASONAL
+  CLOSED
+  PROPOSED
+}
+
+enum CropSeason {
+  KHARIF
+  RABI
+  PERENNIAL
+}
+
+enum CollectionFeasibility {
+  EASY
+  MODERATE
+  DIFFICULT
+}
+
+enum CollectionPointType {
+  BIN
+  DHALAO
+  TRANSFER_STATION
+  LANDFILL
+}
+
+enum RoadType {
+  NATIONAL_HIGHWAY
+  STATE_HIGHWAY
+  DISTRICT_ROAD
+  VILLAGE_ROAD
+  UNPAVED
+}
+
+enum RoadCondition {
+  GOOD
+  FAIR
+  POOR
+}
+
+enum SourceType {
+  FARM_GATE
+  COLLECTION_CENTER
+  INDUSTRY_GATE
+  MARKET
+}
+
+enum TransactionType {
+  SPOT
+  CONTRACT
+}
+
+enum DeliveryOption {
+  EX_WORKS
+  DELIVERED
+  BOTH
+}
+
+enum QualityGrade {
+  A
+  B
+  C
+}
+
+enum ListingStatus {
+  ACTIVE
+  PAUSED
+  EXPIRED
+  FULFILLED
+}
+
+enum OrderStatus {
+  REQUESTED
+  NEGOTIATING
+  CONFIRMED
+  IN_TRANSIT
+  DELIVERED
+  PAID
+  CLOSED
+  CANCELLED
+}
+
+enum SurveyType {
+  AGRICULTURAL
+  INDUSTRIAL
+  MUNICIPAL
+  COLLECTION_POINT
+  PROCESSING_FACILITY
+  TRANSPORT_ROUTE
+  PRICE_DATA
+  SEASONAL_DATA
+}
+
+enum District {
+  SONITPUR
+  KAMRUP
+  KAMRUP_METRO
+  BISWANATH
+  NAGAON
+  GOALPARA
+  BARPETA
+  NALBARI
+  CHIRANG
+  KOKRAJHAR
+  DHUBRI
+  SOUTH_SALMARA
+  BONGAIGAON
+  MORIGAON
+  JORHAT
+  SIBSAGAR
+  DIBRUGARH
+  TINSUKIA
+  LAKHIMPUR
+  DHEMAJI
+  GOLAGHAT
+  KARBI_ANGLONG
+  DIMA_HASAO
+  CACHAR
+  HAILAKANDI
+  KARIMGANJ
+  DARRANG
+  UDALGURI
+  BAKSA
+}
+
+enum Month {
+  JANUARY
+  FEBRUARY
+  MARCH
+  APRIL
+  MAY
+  JUNE
+  JULY
+  AUGUST
+  SEPTEMBER
+  OCTOBER
+  NOVEMBER
+  DECEMBER
+}
+
+enum WeatherCondition {
+  SUNNY
+  PARTLY_CLOUDY
+  CLOUDY
+  RAINY
+  STORMY
+  FOGGY
+}
+
+enum EnvClearanceStatus {
+  OBTAINED
+  PENDING
+  NOT_REQUIRED
+  REJECTED
+}
+
+enum NotificationType {
+  ORDER_UPDATE
+  OFFER_RECEIVED
+  OFFER_ACCEPTED
+  OFFER_REJECTED
+  PRICE_ALERT
+  SYSTEM
+  MESSAGE
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// USERS & AUTH
+// ─────────────────────────────────────────────────────────────────────────────
+
+model User {
+  id                String    @id @default(cuid())
+  email             String    @unique
+  passwordHash      String
+  fullName          String
+  mobile            String
+  district          District
+  role              Role
+  isEmailVerified   Boolean   @default(false)
+  emailVerifyToken  String?
+  emailVerifyExpiry DateTime?
+  isApproved        Boolean   @default(false)
+  isSuspended       Boolean   @default(false)
+  failedLoginCount  Int       @default(0)
+  lockedUntil       DateTime?
+  rememberToken     String?
+  passwordResetToken  String?
+  passwordResetExpiry DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  refreshTokens RefreshToken[]
+  sellerProfile SellerProfile?
+  buyerProfile  BuyerProfile?
+
+  listingsAsSeller  Listing[]      @relation("SellerListings")
+  requirementsAsBuyer Requirement[] @relation("BuyerRequirements")
+  ordersAsBuyer     Order[]        @relation("BuyerOrders")
+  ordersAsSeller    Order[]        @relation("SellerOrders")
+  notifications     Notification[]
+  sentMessages      Message[]      @relation("MessageSender")
+  receivedMessages  Message[]      @relation("MessageReceiver")
+  auditLogs         AuditLog[]
+
+  @@index([email])
+  @@index([role])
+}
+
+model RefreshToken {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([token])
+}
+
+model SellerProfile {
+  id               String            @id @default(cuid())
+  userId           String            @unique
+  user             User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sellerType       SellerType
+  organisationName String?
+  designation      String?
+  locationArea     String?
+  latitude         Float?
+  longitude        Float?
+  operationalStatus OperationalStatus @default(OPERATIONAL)
+  operatingMonths  Month[]
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+
+  agriculturalSources AgriculturalSource[]
+  industrialSources   IndustrialSource[]
+  municipalWasteSites MunicipalWasteSite[]
+}
+
+model BuyerProfile {
+  id                   String             @id @default(cuid())
+  userId               String             @unique
+  user                 User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  buyerType            BuyerType
+  companyName          String
+  ownerOrOperator      String?
+  locationArea         String?
+  latitude             Float?
+  longitude            Float?
+  installedCapacityTPD Float?
+  feedstockTypesAccepted String[]
+  maxMoisturePct       Float?
+  maxAshPct            Float?
+  gridConnectivity     Boolean            @default(false)
+  envClearanceStatus   EnvClearanceStatus @default(PENDING)
+  deliveryRequired     Boolean            @default(false)
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+
+  processingFacilities ProcessingFacility[]
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BIOMASS SOURCES
+// ─────────────────────────────────────────────────────────────────────────────
+
+model AgriculturalSource {
+  id                   String                @id @default(cuid())
+  code                 String                @unique  // AGR-xxx
+  sellerProfileId      String
+  sellerProfile        SellerProfile         @relation(fields: [sellerProfileId], references: [id], onDelete: Cascade)
+  name                 String
+  district             District
+  locationArea         String?
+  latitude             Float
+  longitude            Float
+  biomassType          String
+  cropName             String?
+  cropSeason           CropSeason
+  annualProductionTons Float?
+  residueRatio         Float?                // residue per unit crop
+  biomassAvailableTons Float?
+  moisturePct          Float?
+  calorificValueKcalKg Float?
+  collectionFeasibility CollectionFeasibility @default(MODERATE)
+  currentDisposal      String?
+  priceRsTon           Float?
+  availableQtyTonsMonth Float?
+  peakSeason           Month[]
+  leanSeason           Month[]
+  deliveryOption       DeliveryOption        @default(EX_WORKS)
+  notes                String?
+  isActive             Boolean               @default(true)
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
+
+  listings Listing[]
+
+  @@index([district])
+  @@index([biomassType])
+}
+
+model IndustrialSource {
+  id                       String            @id @default(cuid())
+  code                     String            @unique  // IND-xxx
+  sellerProfileId          String
+  sellerProfile            SellerProfile     @relation(fields: [sellerProfileId], references: [id], onDelete: Cascade)
+  industryName             String
+  industryType             String
+  contactPerson            String?
+  contactMobile            String?
+  district                 District
+  locationArea             String?
+  latitude                 Float
+  longitude                Float
+  operationalStatus        OperationalStatus @default(OPERATIONAL)
+  operatingMonths          Month[]
+  dailyCapacityTons        Float?
+  annualCapacityTons       Float?
+  biomassType              String
+  dailyBiomassTons         Float?
+  annualBiomassTons        Float?
+  currentDisposal          String?
+  currentPriceRsTon        Float?
+  minAcceptablePriceRsTon  Float?
+  availableQtyTonsMonth    Float?
+  peakSeason               Month[]
+  leanSeason               Month[]
+  deliveryOption           DeliveryOption    @default(EX_WORKS)
+  storageCapacityTons      Float?
+  moisturePct              Float?
+  calorificValueKcalKg     Float?
+  contaminationLevel       String?
+  paymentTerms             String?
+  contractInterest         Boolean           @default(false)
+  distanceToHighwayKm      Float?
+  roadAccessQuality        RoadCondition     @default(FAIR)
+  loadingFacilities        Boolean           @default(false)
+  weighbridge              Boolean           @default(false)
+  isActive                 Boolean           @default(true)
+  createdAt                DateTime          @default(now())
+  updatedAt                DateTime          @updatedAt
+
+  listings Listing[]
+
+  @@index([district])
+  @@index([biomassType])
+  @@index([industryType])
+}
+
+model MunicipalWasteSite {
+  id                    String              @id @default(cuid())
+  code                  String              @unique  // MSW-xxx
+  sellerProfileId       String
+  sellerProfile         SellerProfile       @relation(fields: [sellerProfileId], references: [id], onDelete: Cascade)
+  city                  String
+  wardNumber            String?
+  wardName              String?
+  locality              String?
+  district              District
+  latitude              Float
+  longitude             Float
+  collectionPointType   CollectionPointType
+  dailyWasteKg          Float
+  biodegradablePct      Float
+  gardenWasteKgDay      Float?
+  foodWasteKgDay        Float?
+  marketWasteKgDay      Float?
+  moisturePct           Float?
+  contaminationLevel    String?
+  segregationDone       Boolean             @default(false)
+  collectionFrequency   String?
+  peakDay               String?
+  seasonalVariationPct  Float?
+  accessibility         String?
+  aggregationFeasible   Boolean             @default(true)
+  responsibleAuthority  String?
+  isActive              Boolean             @default(true)
+  createdAt             DateTime            @default(now())
+  updatedAt             DateTime            @updatedAt
+
+  listings Listing[]
+
+  @@index([district])
+  @@index([city])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// INFRASTRUCTURE
+// ─────────────────────────────────────────────────────────────────────────────
+
+model CollectionPoint {
+  id                   String   @id @default(cuid())
+  code                 String   @unique  // CP-xxx
+  name                 String
+  district             District
+  locationArea         String?
+  latitude             Float
+  longitude            Float
+  storageCapacityTons  Float?
+  coveredStorageSqm    Float?
+  openStorageSqm       Float?
+  loadingEquipment     Boolean  @default(false)
+  weighbridge          Boolean  @default(false)
+  electricity          Boolean  @default(false)
+  water                Boolean  @default(false)
+  security             Boolean  @default(false)
+  operatingHours       String?
+  contactPerson        String?
+  contactMobile        String?
+  storageCostRsTonDay  Float?
+  handlingCostRsTon    Float?
+  accessibilityRating  Int      @default(3)  // 1-5
+  isActive             Boolean  @default(true)
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  routesFrom TransportRoute[] @relation("RouteFrom")
+  routesTo   TransportRoute[] @relation("RouteTo")
+
+  @@index([district])
+}
+
+model ProcessingFacility {
+  id                   String             @id @default(cuid())
+  code                 String             @unique  // FAC-xxx
+  buyerProfileId       String
+  buyerProfile         BuyerProfile       @relation(fields: [buyerProfileId], references: [id], onDelete: Cascade)
+  name                 String
+  facilityType         String
+  district             District
+  locationArea         String?
+  latitude             Float
+  longitude            Float
+  owner                String?
+  status               OperationalStatus  @default(OPERATIONAL)
+  installedCapacityTPD Float?
+  currentUtilisationPct Float?
+  feedstockAccepted    String[]
+  feedstockRequirementTPD Float?
+  maxMoisturePct       Float?
+  maxAshPct            Float?
+  purchasePriceRsTon   Float?
+  paymentTerms         String?
+  deliveryRequired     Boolean            @default(false)
+  distanceToHighwayKm  Float?
+  gridConnectivity     Boolean            @default(false)
+  envClearanceStatus   EnvClearanceStatus @default(PENDING)
+  commissioningDate    DateTime?
+  isActive             Boolean            @default(true)
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+
+  requirements Requirement[]
+
+  @@index([district])
+  @@index([facilityType])
+}
+
+model TransportRoute {
+  id                    String        @id @default(cuid())
+  code                  String        @unique  // TR-xxx
+  fromLocationId        String?
+  fromLocationName      String
+  toLocationId          String?
+  toLocationName        String
+  collectionPointFromId String?
+  collectionPointFrom   CollectionPoint? @relation("RouteFrom", fields: [collectionPointFromId], references: [id])
+  collectionPointToId   String?
+  collectionPointTo     CollectionPoint? @relation("RouteTo", fields: [collectionPointToId], references: [id])
+  distanceKm            Float
+  roadType              RoadType      @default(DISTRICT_ROAD)
+  roadCondition         RoadCondition @default(FAIR)
+  travelTimeHours       Float?
+  suitableVehicle       String?
+  fuelCostRsKm          Float?
+  tollChargesRs         Float?
+  vehicleLoadTons       Float         @default(10)  // configurable
+  seasonalAccessibility String?
+  notes                 String?
+  isActive              Boolean       @default(true)
+  createdAt             DateTime      @default(now())
+  updatedAt             DateTime      @updatedAt
+
+  @@index([fromLocationName])
+  @@index([toLocationName])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PRICING & AVAILABILITY
+// ─────────────────────────────────────────────────────────────────────────────
+
+model BiomassPrice {
+  id                String          @id @default(cuid())
+  code              String          @unique  // PRC-xxx
+  date              DateTime
+  biomassType       String
+  district          District
+  market            String?
+  sourceType        SourceType      @default(FARM_GATE)
+  priceRsTon        Float
+  priceRsQuintal    Float           // computed: priceRsTon / 10
+  moistureCondition String?
+  qualityGrade      QualityGrade    @default(B)
+  transactionType   TransactionType @default(SPOT)
+  quantityTons      Float?
+  buyerType         String?
+  seasonalFactor    Float           @default(1.0)
+  dataSource        String?
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  @@index([district])
+  @@index([biomassType])
+  @@index([date])
+}
+
+model SeasonalAvailability {
+  id                  String   @id @default(cuid())
+  code                String   @unique  // SEA-xxx
+  biomassType         String
+  crop                String?
+  district            District
+  month               Month
+  availabilityTons    Float
+  harvestPeriod       String?
+  peakAvailability    Float?
+  moisturePct         Float?
+  collectionWindowDays Int?
+  weatherConstraint   String?
+  year                Int
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@index([district])
+  @@index([biomassType])
+  @@index([month])
+}
+
+model WeatherRecord {
+  id                    String           @id @default(cuid())
+  date                  DateTime
+  district              District
+  location              String?
+  rainfallMm            Float?
+  maxTempC              Float?
+  minTempC              Float?
+  humidityPct           Float?
+  windSpeedKmh          Float?
+  condition             WeatherCondition @default(SUNNY)
+  collectionFeasibility CollectionFeasibility @default(EASY)
+  dataSource            String?
+  createdAt             DateTime         @default(now())
+  updatedAt             DateTime         @updatedAt
+
+  @@index([district])
+  @@index([date])
+}
+
+model SurveyProgress {
+  id              String     @id @default(cuid())
+  surveyType      SurveyType
+  district        District
+  targetCount     Int
+  completedCount  Int
+  // pendingCount = targetCount - completedCount (computed, not stored)
+  completionPct   Float      // computed: completedCount / targetCount * 100
+  lastUpdated     DateTime   @updatedAt
+  createdAt       DateTime   @default(now())
+
+  @@unique([surveyType, district])
+  @@index([surveyType])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MARKETPLACE
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Listing {
+  id                    String        @id @default(cuid())
+  sellerUserId          String
+  sellerUser            User          @relation("SellerListings", fields: [sellerUserId], references: [id])
+  biomassType           String
+  quantityTonsMonth     Float
+  priceRsTon            Float
+  moisturePct           Float?
+  qualityGrade          QualityGrade  @default(B)
+  calorificValueKcalKg  Float?
+  availabilityStartDate DateTime?
+  availabilityEndDate   DateTime?
+  peakMonths            Month[]
+  leanMonths            Month[]
+  deliveryOption        DeliveryOption @default(EX_WORKS)
+  district              District
+  locationArea          String?
+  latitude              Float?
+  longitude             Float?
+  description           String?
+  photoUrls             String[]
+  status                ListingStatus @default(ACTIVE)
+
+  // Source linkage (only one should be set)
+  agriculturalSourceId  String?
+  agriculturalSource    AgriculturalSource? @relation(fields: [agriculturalSourceId], references: [id])
+  industrialSourceId    String?
+  industrialSource      IndustrialSource?   @relation(fields: [industrialSourceId], references: [id])
+  municipalWasteSiteId  String?
+  municipalWasteSite    MunicipalWasteSite? @relation(fields: [municipalWasteSiteId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  offers Order[]
+
+  @@index([biomassType])
+  @@index([district])
+  @@index([status])
+  @@index([sellerUserId])
+}
+
+model Requirement {
+  id                    String         @id @default(cuid())
+  buyerUserId           String
+  buyerUser             User           @relation("BuyerRequirements", fields: [buyerUserId], references: [id])
+  processingFacilityId  String?
+  processingFacility    ProcessingFacility? @relation(fields: [processingFacilityId], references: [id])
+  biomassType           String
+  quantityTonsMonth     Float
+  maxPriceRsTon         Float?
+  maxMoisturePct        Float?
+  maxAshPct             Float?
+  deliveryDistrict      District
+  deliveryLocationArea  String?
+  deliveryLatitude      Float?
+  deliveryLongitude     Float?
+  priceCeilingRsTon     Float?
+  transactionType       TransactionType @default(SPOT)
+  validUntil            DateTime?
+  description           String?
+  isActive              Boolean         @default(true)
+  createdAt             DateTime        @default(now())
+  updatedAt             DateTime        @updatedAt
+
+  @@index([biomassType])
+  @@index([deliveryDistrict])
+  @@index([buyerUserId])
+}
+
+model Order {
+  id               String      @id @default(cuid())
+  listingId        String
+  listing          Listing     @relation(fields: [listingId], references: [id])
+  buyerUserId      String
+  buyerUser        User        @relation("BuyerOrders", fields: [buyerUserId], references: [id])
+  sellerUserId     String
+  sellerUser       User        @relation("SellerOrders", fields: [sellerUserId], references: [id])
+  quantityTons     Float
+  offeredPriceRsTon Float
+  counterPriceRsTon Float?
+  finalPriceRsTon  Float?
+  transportCostRsTon Float?
+  landedCostRsTon  Float?      // finalPriceRsTon + transportCostRsTon
+  status           OrderStatus @default(REQUESTED)
+  deliveryAddress  String?
+  deliveryLatitude Float?
+  deliveryLongitude Float?
+  expectedDeliveryDate DateTime?
+  actualDeliveryDate   DateTime?
+  paymentDueDate   DateTime?
+  paymentDate      DateTime?
+  notes            String?
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+
+  messages      Message[]
+  notifications Notification[]
+
+  @@index([listingId])
+  @@index([buyerUserId])
+  @@index([sellerUserId])
+  @@index([status])
+}
+
+model Message {
+  id         String   @id @default(cuid())
+  orderId    String
+  order      Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  senderId   String
+  sender     User     @relation("MessageSender", fields: [senderId], references: [id])
+  receiverId String
+  receiver   User     @relation("MessageReceiver", fields: [receiverId], references: [id])
+  content    String
+  isRead     Boolean  @default(false)
+  createdAt  DateTime @default(now())
+
+  @@index([orderId])
+  @@index([senderId])
+  @@index([receiverId])
+}
+
+model Notification {
+  id        String           @id @default(cuid())
+  userId    String
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  orderId   String?
+  order     Order?           @relation(fields: [orderId], references: [id])
+  type      NotificationType
+  title     String
+  body      String
+  isRead    Boolean          @default(false)
+  createdAt DateTime         @default(now())
+
+  @@index([userId])
+  @@index([isRead])
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id])
+  action     String
+  entityType String
+  entityId   String?
+  oldValues  Json?
+  newValues  Json?
+  ipAddress  String?
+  userAgent  String?
+  createdAt  DateTime @default(now())
+
+  @@index([userId])
+  @@index([entityType])
+  @@index([createdAt])
+}
